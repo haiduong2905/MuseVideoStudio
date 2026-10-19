@@ -90,7 +90,7 @@ class TestMailboxState(unittest.TestCase):
 class TestMigrateLegacy(unittest.TestCase):
     def test_migrate_khi_chua_co_db_moi(self):
         # giả lập APPDATA cũ có data.db
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             legacy_dir = os.path.join(tmp, "SocialUploader")
             os.makedirs(legacy_dir)
             legacy_db = os.path.join(legacy_dir, "data.db")
@@ -109,8 +109,11 @@ class TestMigrateLegacy(unittest.TestCase):
                 import shutil
                 os.makedirs(os.path.dirname(new_db), exist_ok=True)
                 shutil.copy2(legacy_db, new_db)
-                r = sqlite3.connect(new_db).execute(
-                    "SELECT x FROM t").fetchone()
+                conn2 = sqlite3.connect(new_db)
+                try:
+                    r = conn2.execute("SELECT x FROM t").fetchone()
+                finally:
+                    conn2.close()
                 self.assertEqual(r[0], "cu")
             finally:
                 if old_appdata is None:

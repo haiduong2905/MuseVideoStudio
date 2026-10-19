@@ -86,7 +86,7 @@ class TestVerifySha256(unittest.TestCase):
 
 class TestDownloadFile(unittest.TestCase):
     def test_file_url_va_progress(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             src = os.path.join(tmp, "src.mp4")
             with open(src, "wb") as f:
                 f.write(b"x" * 3000000)
@@ -100,7 +100,7 @@ class TestDownloadFile(unittest.TestCase):
             self.assertFalse(os.path.exists(dest + ".part"))  # dọn .part
 
     def test_url_sai_bao_loi(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             bogus = Path(tmp) / "khong_ton_tai.mp4"
             with self.assertRaises(ManifestError):
                 download_file(bogus.as_uri(),
