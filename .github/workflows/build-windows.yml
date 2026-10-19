@@ -1,0 +1,109 @@
+name: Build Windows installer
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clean stale build artifacts
+        run: |
+          if (Test-Path build) { Remove-Item -Recurse -Force build; Write-Host "da xoa build/ cu" }
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist; Write-Host "da xoa dist/ cu" }
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests (gate — build đỏ nếu test rớt)
+        run: |
+          $env:QT_QPA_PLATFORM="offscreen"
+          python -m unittest discover
+        # Chạy từ project root để tests/__init__.py import PySide6 thật
+        # trước các test stub Qt (tránh nhiễu sys.modules).
+
+      - name: Build with PyInstaller
+        run: pyinstaller --clean --noconfirm muse-video-studio.spec
+
+      - name: Diagnose bundle
+        run: |
+          Write-Host "=== tool versions ==="
+          python --version
+          pyinstaller --version
+          Write-Host "=== repo root ==="
+          Get-ChildItem -Name
+          Write-Host "=== dist/MuseVideoStudio ==="
+          if (Test-Path "dist/MuseVideoStudio") {
+            Get-ChildItem "dist/MuseVideoStudio" | Format-Table Name, Length -AutoSize | Out-String -Width 200 | Write-Host
+          } else { Write-Host "!! KHONG CO dist/MuseVideoStudio" }
+          Write-Host "=== _internal (80 file dau) ==="
+          if (Test-Path "dist/MuseVideoStudio/_internal") {
+            Get-ChildItem "dist/MuseVideoStudio/_internal" | Select-Object -First 80 | Format-Table Name, Length -AutoSize | Out-String -Width 200 | Write-Host
+          } else { Write-Host "!! KHONG CO _internal" }
+          $zip = "dist/MuseVideoStudio/_internal/base_library.zip"
+          if (-not (Test-Path $zip)) { throw "THIEU base_library.zip - build loi!" }
+          $size = (Get-Item $zip).Length
+          if ($size -lt 500KB) { throw "base_library.zip qua nho ($size bytes) - build loi!" }
+          if (-not (Test-Path "dist/MuseVideoStudio/_internal/python311.dll")) { throw "THIEU python311.dll - build loi!" }
+          Write-Host "Bundle OK: base_library.zip = $size bytes"
+
+      - name: Zip portable build
+        run: Compress-Archive -Path dist/MuseVideoStudio/* -DestinationPath MuseVideoStudio-win64.zip
+
+      - name: Build installer (NSIS)
+        shell: pwsh
+        run: |
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) {
+            choco install nsis -y
+            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          }
+          Write-Host "makensis: $makensis"
+          Write-Host "Workspace: $PWD"
+          $distDir = Join-Path $PWD "dist\MuseVideoStudio"
+          $outFile = Join-Path $PWD "MuseVideoStudio-Setup.exe"
+          $iconIco = Join-Path $PWD "app\assets\icon.ico"
+          if (-not (Test-Path $iconIco)) { throw "Khong thay icon $iconIco!" }
+          if (-not (Test-Path $distDir)) { throw "Khong thay $distDir!" }
+          $n = (Get-ChildItem $distDir -Recurse -File | Measure-Object).Count
+          Write-Host "So file trong dist: $n"
+          & $makensis "/DDISTDIR=$distDir" "/DOUTFILE=$outFile" "/DICONICO=$iconIco" installer/installer.nsi
+          if (-not (Test-Path $outFile)) { throw "Khong tao duoc MuseVideoStudio-Setup.exe!" }
+          $sz = (Get-Item $outFile).Length
+          Write-Host "Setup OK: $sz bytes"
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            MuseVideoStudio-win64.zip
+            MuseVideoStudio-Setup.exe
+
+      - name: Upload artifacts (build từ push thường)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: MuseVideoStudio-build
+          path: |
+            MuseVideoStudio-win64.zip
+            MuseVideoStudio-Setup.exe
+          retention-days: 14
