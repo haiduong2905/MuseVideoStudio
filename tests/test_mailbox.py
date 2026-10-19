@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -91,7 +92,7 @@ class TestDownloadFile(unittest.TestCase):
                 f.write(b"x" * 3000000)
             dest = os.path.join(tmp, "sub", "dst.mp4")
             calls = []
-            download_file("file://" + src, dest,
+            download_file(Path(src).as_uri(), dest,
                           progress_cb=lambda d, t: calls.append((d, t)))
             self.assertTrue(os.path.isfile(dest))
             self.assertEqual(os.path.getsize(dest), 3000000)
@@ -100,8 +101,9 @@ class TestDownloadFile(unittest.TestCase):
 
     def test_url_sai_bao_loi(self):
         with tempfile.TemporaryDirectory() as tmp:
+            bogus = Path(tmp) / "khong_ton_tai.mp4"
             with self.assertRaises(ManifestError):
-                download_file("file:///khong/tontai.mp4",
+                download_file(bogus.as_uri(),
                               os.path.join(tmp, "d.mp4"))
 
 

@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -58,7 +59,7 @@ class TestPollOnce(unittest.TestCase):
                 "hashtags": "#beastbytes",
                 "duration": 10,
                 "ratio": "9:16",
-                "file_url": "file://" + self.video_src,
+                "file_url": Path(self.video_src).as_uri(),
             }],
         }
         self.manifest_path = os.path.join(self.workdir, "manifest.json")
@@ -69,7 +70,7 @@ class TestPollOnce(unittest.TestCase):
 
     def _worker(self):
         return MailboxWorker(
-            "file://" + self.manifest_path,
+            Path(self.manifest_path).as_uri(),
             os.path.join(self.workdir, "out"),
             poll_minutes=5, auto_queue=True)
 
